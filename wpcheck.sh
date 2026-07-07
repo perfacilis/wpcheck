@@ -68,17 +68,6 @@ wp_check_config_disallow_file_edit() {
   fi
 }
 
-wp_check_config_disallow_file_mods() {
-  local DISALLOW_FILE_EDIT
-  DISALLOW_FILE_EDIT=$(wp_config_value 'DISALLOW_FILE_MODS')
-
-  if [ "$DISALLOW_FILE_EDIT" = 1 ]; then
-    success "Config 'DISALLOW_FILE_MODS' properly set to TRUE"
-  else
-    error "Config 'DISALLOW_FILE_MODS' MUST be set to TRUE"
-  fi
-}
-
 wp_check_automatic_updater_plugin() {
   if wp_cli plugin is-active "automatic-updater"; then
     success "Plugin automatic-updater aka 'Advanced Automatic Updates' found!"
@@ -114,7 +103,6 @@ main() {
   wp_check_config_in_parent_dir
   wp_check_config_debug_disabled
   wp_check_config_disallow_file_edit
-  wp_check_config_disallow_file_mods
   wp_check_automatic_updater_plugin
   wp_check_inactive_themes
   wp_verify_core_checksums
