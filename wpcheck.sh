@@ -15,58 +15,25 @@ error() {
   echo -e "- ${RED}$1${NC}"
 }
 
-wp_config_file() {
-  if [ -f "$ROOT/../wp-config.php" ]; then
-    echo "$ROOT/../wp-config.php";
-    return 0
-  fi
+wp_cli() {
+  local WP_USER
+  WP_USER=$(stat -c'%U' "$ROOT")
 
-  if [ -f "$ROOT/wp-config.php" ]; then
-    echo "$ROOT/wp-config.php";
-    return 0
-  fi
-
-  error "Cannot find wp-config.php!"
-  exit 1
+  sudo -u "$WP_USER" -- wp --path="$ROOT" "$@"
 }
 
 wp_config_value() {
-  local WPCONFIG VALUE OPTION="$1"
-  WPCONFIG=$(wp_config_file)
-  VALUE="$(grep -oP "define\( *['\"]${OPTION}['\"], *\K(.+)\);" "$WPCONFIG" | sed "s/^[ '\"]*//;s/[ '\"]*);//")"
-
-  if [ -z "$VALUE" ]; then
-    echo "null";
-    return 1
-  fi
-
-  echo "$VALUE"
-  return 0
+  local OPTION="$1"
+  wp_cli config get "$OPTION" 2>/dev/null
 }
 
 wp_table_prefix() {
-  local WPCONFIG=$(wp_config_file)
-  grep "\$table_prefix" "$WPCONFIG" | cut -d"'" -f2
+  wp_config_value table_prefix
 }
 
 wp_option_value() {
-  local USER PASS HOST DBNAME DBMS="mysql" OPTION="$1"
-  USER=$(wp_config_value 'DB_USER')
-  PASS=$(wp_config_value 'DB_PASSWORD')
-  HOST=$(wp_config_value 'DB_HOST')
-  DBNAME=$(wp_config_value 'DB_NAME')
-  DBPREFIX=$(wp_table_prefix)
-
-  if [ -z "$OPTION" ]; then
-    echo "Usage: wp_option_value OPTION"
-    exit 1
-  fi
-
-  if which mariadb >/dev/null 2>&1; then
-    DBMS="mariadb"
-  fi
-
-  $DBMS -h"$HOST" -u"$USER" -p"$PASS" --database "$DBNAME" -Bse "SELECT option_value FROM ${DBPREFIX}options WHERE option_name = '$OPTION';"
+  local OPTION="$1"
+  wp_cli option get "$OPTION"
 }
 
 wp_check_config_in_parent_dir() {
@@ -83,7 +50,7 @@ wp_check_config_debug_disabled() {
   local WP_DEBUG
   WP_DEBUG=$(wp_config_value 'WP_DEBUG')
 
-  if [ "${WP_DEBUG,,}" = "false" ]; then
+  if [ -z "$WP_DEBUG" ]; then
     success "Config 'WP_DEBUG' properly set to FALSE."
   else
     error "Config 'WP_DEBUG' MUST be set to FALSE."
@@ -94,15 +61,31 @@ wp_check_config_disallow_file_edit() {
   local DISALLOW_FILE_EDIT
   DISALLOW_FILE_EDIT=$(wp_config_value 'DISALLOW_FILE_EDIT')
 
-  if [ "${DISALLOW_FILE_EDIT,,}" = "true" ]; then
+  if [ "$DISALLOW_FILE_EDIT" = 1 ]; then
     success "Config 'DISALLOW_FILE_EDIT' properly set to TRUE"
   else
     error "Config 'DISALLOW_FILE_EDIT' MUST be set to TRUE"
   fi
 }
 
+wp_check_config_disallow_file_mods() {
+  local DISALLOW_FILE_EDIT
+  DISALLOW_FILE_EDIT=$(wp_config_value 'DISALLOW_FILE_MODS')
+
+  if [ "$DISALLOW_FILE_EDIT" = 1 ]; then
+    success "Config 'DISALLOW_FILE_MODS' properly set to TRUE"
+  else
+    error "Config 'DISALLOW_FILE_MODS' MUST be set to TRUE"
+  fi
+}
+
 wp_check_automatic_updater_plugin() {
-  local PLUGIN_DIR="$ROOT/wp-content/plugins/"
+  local PLUGIN_DIR
+
+  if ! PLUGIN_DIR=$(wp_config_value 'PLUGINDIR'); then
+    PLUGIN_DIR="$ROOT/wp-content/plugins/";
+  fi
+
   if [ -d "$PLUGIN_DIR/automatic-updater" ]; then
     success "Plugin automatic-updater aka 'Advanced Automatic Updates' found!"
   else
@@ -127,6 +110,10 @@ wp_check_inactive_themes() {
   done
 }
 
+wp_verify_core_checksums() {
+  wp_cli --path="$ROOT" core verify-checksums
+}
+
 main() {
   if [ ! -d "$ROOT" ]; then
     echo "Usage $0 /path/to/wordpress/root"
@@ -136,8 +123,10 @@ main() {
   wp_check_config_in_parent_dir
   wp_check_config_debug_disabled
   wp_check_config_disallow_file_edit
+  wp_check_config_disallow_file_mods
   wp_check_automatic_updater_plugin
   wp_check_inactive_themes
+  wp_verify_core_checksums
 }
 
 main
