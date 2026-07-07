@@ -24,7 +24,7 @@ wp_cli() {
 
 wp_config_value() {
   local OPTION="$1"
-  wp_cli config get "$OPTION" 2>/dev/null
+  wp_cli config get "$OPTION" 2>/dev/null || true
 }
 
 wp_table_prefix() {
@@ -80,13 +80,7 @@ wp_check_config_disallow_file_mods() {
 }
 
 wp_check_automatic_updater_plugin() {
-  local PLUGIN_DIR
-
-  if ! PLUGIN_DIR=$(wp_config_value 'PLUGINDIR'); then
-    PLUGIN_DIR="$ROOT/wp-content/plugins/";
-  fi
-
-  if [ -d "$PLUGIN_DIR/automatic-updater" ]; then
+  if wp_cli plugin is-active "automatic-updater"; then
     success "Plugin automatic-updater aka 'Advanced Automatic Updates' found!"
   else
     error "Plugin automatic-updater aka 'Advanced Automatic Updates' not found!"
@@ -94,16 +88,13 @@ wp_check_automatic_updater_plugin() {
 }
 
 wp_check_inactive_themes() {
-  local THEMES=$(find "$ROOT/wp-content/themes/" -mindepth 1 -maxdepth 1 -type d)
-  local CURRENT_THEME=$(wp_option_value 'current_theme')
-  local THEME THEME_NAME
+  local THEMES CURRENT_THEME THEME_NAME
+  THEMES=$(wp_cli theme list --field=name)
+  CURRENT_THEME=$(wp_cli theme list --field=name --status=active)
 
-  for THEME in $THEMES; do
-    THEME_NAME=$(basename "$THEME")
-    if [ "$THEME_NAME" = "${CURRENT_THEME,,}" ]; then
+  for THEME_NAME in $THEMES; do
+    if [ "$THEME_NAME" = "$CURRENT_THEME" ]; then
       success "Theme '$THEME_NAME' is current theme, leave as is."
-    elif [ "$THEME_NAME" = "twentytwentyfive" ]; then
-      success "Theme '$THEME_NAME' is wp default, leave as is."
     else
       error "Theme '$THEME_NAME' MUST be removed!"
     fi
