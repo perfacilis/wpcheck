@@ -27,10 +27,6 @@ wp_config_value() {
   wp_cli config get "$OPTION" 2>/dev/null || true
 }
 
-wp_table_prefix() {
-  wp_config_value table_prefix
-}
-
 wp_option_value() {
   local OPTION="$1"
   wp_cli option get "$OPTION"
@@ -90,8 +86,37 @@ wp_check_inactive_themes() {
   done
 }
 
+wp_check_core_updates() {
+  local NEW_VERSION
+  NEW_VERSION=$(wp_cli core check-update --field=version)
+
+  if [ ! -z "$NEW_VERSION" ]; then
+    error "Wordpress MUST be updated to $NEW_VERSION."
+  fi
+}
+
+wp_check_plugin_updates() {
+  local UPDATE_PLUGINS PLUGIN_NAME
+  UPDATE_PLUGINS=$(wp_cli plugin list --update=available --field=name)
+
+  for PLUGIN_NAME in $UPDATE_PLUGINS; do
+    error "Plugin '$PLUGIN_NAME' MUST be up[dated."
+  done
+}
+
 wp_verify_core_checksums() {
-  wp_cli --path="$ROOT" core verify-checksums
+  wp_cli core verify-checksums
+}
+
+wp_use_nonstandard_table_prefix() {
+  local TABLE_PREFIX
+  TABLE_PREFIX=$(wp_config_value table_prefix)
+
+  if [ "$TABLE_PREFIX" = "wp_" ]; then
+    error "Table prefix '$TABLE_PREFIX' SHOULD be changed to something non standard."
+  else
+    success "Table prefix '$TABLE_PREFIX' is non standard, great!"
+  fi
 }
 
 main() {
@@ -100,12 +125,18 @@ main() {
     exit 1
   fi
 
+  # MUST fix
   wp_check_config_in_parent_dir
   wp_check_config_debug_disabled
   wp_check_config_disallow_file_edit
   wp_check_automatic_updater_plugin
   wp_check_inactive_themes
+  wp_check_core_updates
+  wp_check_plugin_updates
   wp_verify_core_checksums
+
+  # SHOULD fix
+  wp_use_nonstandard_table_prefix
 }
 
 main
